@@ -8,11 +8,13 @@
   html, body { margin: 0; height: 100%; background: #000; color: #fff; font: 600 28px system-ui, sans-serif; }
   video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   #status { position: fixed; left: 0; right: 0; bottom: 0; padding: 24px; background: rgba(0,0,0,.7); text-align: center; }
+  #toggle { position: fixed; inset: 0; width: 100%; height: 100%; background: transparent; border: 0; }
 </style>
 </head>
 <body>
 <video id="cam" autoplay playsinline muted aria-hidden="true"></video>
-<div id="status" role="status" aria-live="polite">Пускам камерата…</div>
+<button id="toggle" aria-label="Старт или пауза"></button>
+<div id="status" role="status" aria-live="polite">Докоснете екрана, за да започнете</div>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <script>
@@ -44,6 +46,25 @@ function where([x, , w]) {
   return center < 0.35 ? 'вляво' : center > 0.65 ? 'вдясно' : 'отпред';
 }
 
+let running = false, started = false, lastSaid = '';
+
+function say(text) {
+  if (text === lastSaid || speechSynthesis.speaking) return;
+  lastSaid = text;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'bg-BG';
+  speechSynthesis.speak(u);
+}
+
+document.getElementById('toggle').onclick = () => {
+  if (!started) { started = running = true; say('Започвам'); start(); return; }
+  running = !running;
+  speechSynthesis.cancel();
+  lastSaid = '';
+  status.textContent = running ? 'Продължавам' : 'Пауза';
+  say(status.textContent);
+};
+
 async function start() {
   try {
     cam.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
@@ -55,9 +76,12 @@ async function start() {
   const model = await cocoSsd.load();
   status.textContent = 'Готово';
   setInterval(async () => {
-    if (cam.readyState < 2) return;
+    if (!running || cam.readyState < 2) return;
     const found = (await model.detect(cam)).filter(d => d.score > 0.6);
-    status.textContent = found.length ? found.map(d => `${BG[d.class] ?? d.class} ${where(d.bbox)}`).join(', ') : 'Нищо познато';
+    if (!found.length) return;
+    const text = [...new Set(found.map(d => `${BG[d.class] ?? d.class} ${where(d.bbox)}`))].sort().join(', ');
+    status.textContent = text;
+    say(text);
   }, 2000);
 }
 start();
