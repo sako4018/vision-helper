@@ -19,6 +19,31 @@
 const cam = document.getElementById('cam');
 const status = document.getElementById('status');
 
+const BG = {
+  'person': 'човек', 'bicycle': 'колело', 'car': 'кола', 'motorcycle': 'мотор', 'airplane': 'самолет',
+  'bus': 'автобус', 'train': 'влак', 'truck': 'камион', 'boat': 'лодка', 'traffic light': 'светофар',
+  'fire hydrant': 'хидрант', 'stop sign': 'знак стоп', 'parking meter': 'паркомер', 'bench': 'пейка',
+  'bird': 'птица', 'cat': 'котка', 'dog': 'куче', 'horse': 'кон', 'sheep': 'овца', 'cow': 'крава',
+  'elephant': 'слон', 'bear': 'мечка', 'zebra': 'зебра', 'giraffe': 'жираф', 'backpack': 'раница',
+  'umbrella': 'чадър', 'handbag': 'чанта', 'tie': 'вратовръзка', 'suitcase': 'куфар', 'frisbee': 'фризби',
+  'skis': 'ски', 'snowboard': 'сноуборд', 'sports ball': 'топка', 'kite': 'хвърчило',
+  'baseball bat': 'бухалка', 'baseball glove': 'ръкавица', 'skateboard': 'скейтборд', 'surfboard': 'сърф',
+  'tennis racket': 'ракета', 'bottle': 'бутилка', 'wine glass': 'чаша за вино', 'cup': 'чаша',
+  'fork': 'вилица', 'knife': 'нож', 'spoon': 'лъжица', 'bowl': 'купа', 'banana': 'банан', 'apple': 'ябълка',
+  'sandwich': 'сандвич', 'orange': 'портокал', 'broccoli': 'броколи', 'carrot': 'морков', 'hot dog': 'хотдог',
+  'pizza': 'пица', 'donut': 'поничка', 'cake': 'торта', 'chair': 'стол', 'couch': 'диван',
+  'potted plant': 'саксия', 'bed': 'легло', 'dining table': 'маса', 'toilet': 'тоалетна', 'tv': 'телевизор',
+  'laptop': 'лаптоп', 'mouse': 'мишка', 'remote': 'дистанционно', 'keyboard': 'клавиатура',
+  'cell phone': 'телефон', 'microwave': 'микровълнова', 'oven': 'фурна', 'toaster': 'тостер',
+  'sink': 'мивка', 'refrigerator': 'хладилник', 'book': 'книга', 'clock': 'часовник', 'vase': 'ваза',
+  'scissors': 'ножица', 'teddy bear': 'плюшено мече', 'hair drier': 'сешоар', 'toothbrush': 'четка за зъби',
+};
+
+function where([x, , w]) {
+  const center = (x + w / 2) / cam.videoWidth;
+  return center < 0.35 ? 'вляво' : center > 0.65 ? 'вдясно' : 'отпред';
+}
+
 async function start() {
   try {
     cam.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
@@ -32,7 +57,7 @@ async function start() {
   setInterval(async () => {
     if (cam.readyState < 2) return;
     const found = (await model.detect(cam)).filter(d => d.score > 0.6);
-    status.textContent = found.length ? found.map(d => d.class).join(', ') : 'Нищо познато';
+    status.textContent = found.length ? found.map(d => `${BG[d.class] ?? d.class} ${where(d.bbox)}`).join(', ') : 'Нищо познато';
   }, 2000);
 }
 start();
