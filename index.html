@@ -65,6 +65,29 @@ document.getElementById('toggle').onclick = () => {
   say(status.textContent);
 };
 
+// ponytail: relative depth per frame, not real meters — an empty room far away can
+// still light up as "near" since it only compares pixels within the same frame.
+// Upgrade path: a metric-depth model (outputs real meters) if false alarms are a problem.
+const depthCanvas = document.createElement('canvas');
+depthCanvas.width = depthCanvas.height = 224;
+const depthCtx = depthCanvas.getContext('2d');
+
+function closeWarning(predicted_depth) {
+  const { data, dims } = predicted_depth;
+  const [h, w] = dims.slice(-2);
+  let min = Infinity, max = -Infinity;
+  for (const v of data) { if (v < min) min = v; if (v > max) max = v; }
+  const range = max - min || 1;
+  let sum = 0, count = 0;
+  for (let y = Math.floor(h * 0.4); y < h; y++) {
+    for (let x = Math.floor(w * 0.35); x < w * 0.65; x++) {
+      sum += (data[y * w + x] - min) / range;
+      count++;
+    }
+  }
+  return count && sum / count > 0.75;
+}
+
 async function start() {
   try {
     cam.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
@@ -72,19 +95,30 @@ async function start() {
     status.textContent = 'Няма достъп до камерата';
     return;
   }
-  status.textContent = 'Зареждам модела…';
-  const model = await cocoSsd.load();
+  status.textContent = 'Зареждам моделите…';
+  const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0');
+  const [model, depth] = await Promise.all([
+    cocoSsd.load(),
+    pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', {
+      dtype: 'q8', device: navigator.gpu ? 'webgpu' : 'wasm',
+    }),
+  ]);
   status.textContent = 'Готово';
   setInterval(async () => {
     if (!running || cam.readyState < 2) return;
     const found = (await model.detect(cam)).filter(d => d.score > 0.6);
-    if (!found.length) return;
-    const text = [...new Set(found.map(d => `${BG[d.class] ?? d.class} ${where(d.bbox)}`))].sort().join(', ');
+    const objects = [...new Set(found.map(d => `${BG[d.class] ?? d.class} ${where(d.bbox)}`))].sort();
+
+    depthCtx.drawImage(cam, 0, 0, 224, 224);
+    const { predicted_depth } = await depth(depthCanvas);
+    if (closeWarning(predicted_depth)) objects.unshift('внимание, близо отпред');
+
+    if (!objects.length) return;
+    const text = objects.join(', ');
     status.textContent = text;
     say(text);
   }, 2000);
 }
-start();
 </script>
 </body>
 </html>
